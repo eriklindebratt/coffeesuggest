@@ -7,22 +7,47 @@
       * { box-sizing: border-box }
       #container {
         width: 300px;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
       }
       #container input[type=search] {
         display: inline-block;
-        width: 90%;
+        width: 100%;
       }
-      #container input[type=submit] {
-        display: inline-block;
-        width: 10%;
+      .search-suggestions.hide {
+        opacity: 0;
+        height: 0;
       }
+      .search-suggestions .list {
+        display: block;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .search-suggestions .item {
+        margin: 3px 0 0;
+        padding: 0;
+      }
+      .search-suggestions .item:first-child {
+        margin-top: 0;
+      }
+      .search-suggestions .item.header {
+        background: red;
+        color: #fff;
+      }
+      .search-suggestions .list .item.selected { background: #005ecb }
+			.search-suggestions .list .item.selected a {
+				display: block;
+				color: #fff;
+			}
     </style>
   </head>
   <body>
     <div id="container">
       <fieldset>
         <legend>Start typing to get suggestions</legend>
-        <input type="search" placeholder="Fill me out">
+        <div class="js-input-container search-suggestions">
+          <input type="search" placeholder="Please, fill me out!">
+        </div>
       </fieldset>
     </div>
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
@@ -33,8 +58,21 @@
           new CoffeeSuggest(
             $('input[type=search]'),
             '/api/search/all?q=',
+            function(data) {
+              console.log('picked suggestion: ', data);
+            },
+            ['Users', 'Clients', 'Projects', 'Deliveries', 'Assets'],
+            function(data) {
+              if (('firstname' in data) && ('lastname' in data))
+                return data.firstname + ' ' + data.lastname;
+              else
+                return data.name;
+            },
             '/search/all?q=',
-            ['Users', 'Clients', 'Projects', 'Deliveries', 'Assets']
+            null,
+            null,
+            function() { console.log('search started'); },
+            function() { console.log('search ended'); }
           );
         }
       });
