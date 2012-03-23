@@ -1,7 +1,7 @@
 /**
  * @param DOMElement/jQuery $inputElem
  * @param string ajaxSearchURIPrefix Used when querying server for suggestions corresponding to "'ajaxSearchURIPrefix' + query"
- * @param function onSuggestionChoiceCallback Fired when user picks a suggestion
+ * @param function onSuggestionPickCallback Fired when user picks a suggestion
  * @param array suggestionListGroupLabels [optional]
  * @param function getSuggestionLabelFunction [optional] When set, this method will be called with item's complete data object to get its "label" value back
  * @param string searchURIPrefix [optional] When set, and user submits the input element (e.g. presses "return" key when input is focused) and no suggestion (if any) is selected, user will be redirected to "'searchURIPrefix' + query"
@@ -10,7 +10,7 @@
  * @param function onSearchStartCallback [optional]
  * @param function onSearchEndCallback [optional]
  */
-CoffeeSuggest = function($inputElem, ajaxSearchURIPrefix, onSuggestionChoiceCallback, suggestionListGroupLabels, getSuggestionLabelFunction, searchURIPrefix, getSuggestionURIFunction, suggestionListLabel, onSearchStartCallback, onSearchEndCallback) {
+CoffeeSuggest = function($inputElem, ajaxSearchURIPrefix, onSuggestionPickCallback, suggestionListGroupLabels, getSuggestionLabelFunction, searchURIPrefix, getSuggestionURIFunction, suggestionListLabel, onSearchStartCallback, onSearchEndCallback) {
   // statics
   this.SELECTED_ITEM_IDENTIFIER        = 'selected';
   this.SUGGESTION_LIST_CONTAINER_MARKUP  = '<div class="js-search-suggestions search-suggestions hide"><div class="js-inner inner clearfix"><div class="inner-right label-small light-grey">'+suggestionListLabel||'Suggestions'+'</div></div></div>';
@@ -18,19 +18,20 @@ CoffeeSuggest = function($inputElem, ajaxSearchURIPrefix, onSuggestionChoiceCall
   this.SUGGESTION_LIST_ITEM_MARKUP       = '<li class="js-item item"></li>';
   this.SUGGESTION_LIST_ITEM_HEADER_MARKUP = '<div class="js-unselectable js-header item header bold uppercase light-grey"><span class="js-inner inner"></span></div>';
 
-  this._$inputElem                     = ($inputElem instanceof jQuery) ? $inputElem.eq(0) : $(inputElem);
-  this._ajaxSearchURIPrefix            = ajaxSearchURIPrefix;
-  this._onSuggestionChoiceCallback     = onSuggestionChoiceCallback;
-  this._suggestionListGroupLabels      = suggestionListGroupLabels;
-  this._getSuggestionLabelFunction     = getSuggestionLabelFunction
-  this._searchURIPrefix                = searchURIPrefix;
-  this._onSearchStartCallback          = onSearchStartCallback;
-  this._onSearchEndCallback            = onSearchEndCallback;
-  this._getSuggestionURIFunction       = getSuggestionURIFunction
-  this._inputHasFocus                  = false;
-  this._currentInputValue              = this._$inputElem.val();
-  this._$suggestionListContainer       = null;
-  this._$suggestionListItems           = [];
+  this._$inputElem                             = ($inputElem instanceof jQuery) ? $inputElem.eq(0) : $(inputElem);
+  this._ajaxSearchURIPrefix                    = ajaxSearchURIPrefix;
+  this._onSuggestionPickCallback               = onSuggestionPickCallback;
+  this._suggestionListGroupLabels              = suggestionListGroupLabels;
+  this._getSuggestionLabelFunction             = getSuggestionLabelFunction
+  this._searchURIPrefix                        = searchURIPrefix;
+  this._onSearchStartCallback                  = onSearchStartCallback;
+  this._onSearchEndCallback                    = onSearchEndCallback;
+  this._getSuggestionURIFunction               = getSuggestionURIFunction
+  this._inputElemHasFocus                      = false;
+  this._currentInputValue                      = this._$inputElem.val();
+  this._lastInputValue                         = this._currentInputValue;
+  this._$suggestionListContainer               = null;
+  this._$suggestionListItems                   = [];
 
   if (!this._$inputElem.length) {
     console.error('CoffeeSuggest: Invalid value for @param "$inputElem"');
@@ -40,66 +41,64 @@ CoffeeSuggest = function($inputElem, ajaxSearchURIPrefix, onSuggestionChoiceCall
     console.error('CoffeeSuggest: Invalid value for @param "ajaxSearchURIPrefix"');
     return null;
   }
-  if (typeof this._onSuggestionChoiceCallback !== 'function') {
-    console.error('CoffeeSuggest: Invalid value for @param "onSuggestionChoiceCallback"');
+  if (typeof this._onSuggestionPickCallback !== 'function') {
+    console.error('CoffeeSuggest: Invalid value for @param "onSuggestionPickCallback"');
     return null;
   }
 
   if (!this._$suggestionListContainer) {
     this._$suggestionListContainer = this._constructSuggestionListContainerElement();
     var $container = this._$inputElem.parents('.js-input-container').eq(0);
-    if (!$container.length) {
-      $container = this._$inputElem.parent().parent();
-    }
+    if (!$container.length) $container = this._$inputElem.parent();
+    if (!$container.length) $container = this._$inputElem.parent().parent();
     $container.append(this._$suggestionListContainer);
   }
 
   this._$inputElem
-    .on('focus', $.proxy(this._onFocus, this))
-    .on('blur', $.proxy(this._onBlur, this))
+    .on('focus', $.proxy(this._onInputElemFocus, this))
+    .on('blur', $.proxy(this._onInputElemBlur, this))
     .on('keyup', $.proxy(this._onKeyUp, this));
 
   $(this._$suggestionListContainer)
-    .on('mouseover', '.item', function(e) {
+    .on('mouseover', '.item', $.proxy(function(e) {
       if ($(e.currentTarget).hasClass('.js-unselectable')) return;
-      $(e.currentTarget)
-        .addClass('selected')
-        .siblings().removeClass('selected');
-    })
+      this._selectItemAtIndex($(e.currentTarget).index())[0];
+    }, this))
     .on('mouseout', '.item', function(e) {
       if ($(e.currentTarget).hasClass('.js-unselectable')) return;
-      $(e.currentTarget)
-        .removeClass('selected')
-        .siblings().removeClass('selected');
-    });
+      $(e.currentTarget).removeClass('selected')
+    })
+    .on('click', '.item a', $.proxy(function(e) {
+      e.preventDefault();
+      this._onSuggestionPick();
+    }, this));
 };
 
-CoffeeSuggest.prototype._onFocus = function(e) {
-  this._inputHasFocus = true;
-  if (this._$suggestionListItems && this._$suggestionListItems.length && this._suggestionListContainer) {
+CoffeeSuggest.prototype._onInputElemFocus = function(e) {
+  this._inputElemHasFocus = true;
+  if (this._$suggestionListItems && this._$suggestionListItems.length && this._$suggestionListContainer) {
     this._toggleSuggestionList(true);
   }
 };
 
-CoffeeSuggest.prototype._onBlur = function(e) {
-  setTimeout($.proxy(function() {
-    this._inputHasFocus = false;
-    if (this._suggestionListContainer) {
+CoffeeSuggest.prototype._onInputElemBlur = function() {
+  setTimeout(function() {
+    this._inputElemHasFocus = false;
+    if (this._$suggestionListContainer) {
       this._toggleSuggestionList(false);
     }
-  }, this), 200);
+  }, 100);
 };
 
 CoffeeSuggest.prototype._onKeyUp = function(e) {
   switch (e.keyCode) {
     case 27:  // esc
-      // trigger blur
-      if (this._inputHasFocus) {
+      if (this._inputElemHasFocus) {
         if (this._currentInputValue) {
           this._currentInputValue = '';
           this._$inputElem.val(this._currentInputValue);
         } else {
-          this._$inputElem.blur();
+          this._$inputElem.val('');
         }
       }
       break;
@@ -112,13 +111,14 @@ CoffeeSuggest.prototype._onKeyUp = function(e) {
       this._selectNextItem();
       break;
     case 13:  // return
-      if (this._inputHasFocus && this._currentInputValue) {
+      if (this._inputElemHasFocus && this._currentInputValue) {
         if (this._getSelectedItem()) {
-          this._onSuggestionChoiceCallback(this._getSelectedItem().JSONData);
+          this._onSuggestionPick();
         } else if (this._searchURIPrefix) {
           // perform search
-          alert(this._searchURIPrefix + this._currentInputValue);
           document.location.href = this._searchURIPrefix + this._currentInputValue;
+        } else {
+          this._onSuggestionPick();
         }
       }
       break;
@@ -134,6 +134,16 @@ CoffeeSuggest.prototype._onKeyUp = function(e) {
         this._toggleSuggestionList(false);
       }
   }
+};
+
+CoffeeSuggest.prototype._onSuggestionPick = function() {
+  // in case no suggestion is selected (most likely because result was empty)
+  // - send current input value as argument to callback
+  var arg = this._getSelectedItem()
+    ? this._getSelectedItem().JSONData
+    : this._currentInputValue;
+
+  this._onSuggestionPickCallback(arg);
 };
 
 CoffeeSuggest.prototype._isValidSearchSuggestQuery = function(query) {
@@ -166,7 +176,13 @@ CoffeeSuggest.prototype._onSearchSuggestComplete = function(loadedData) {
     suggestionItems = loadedData,//this._groupSearchSuggestResults(loadedData),
     currentSuggestionItemIndex = 0,
     addSuggestions = function(items) {
-      if (items.length === 0) return;
+      if (items.length === 0) {
+        scope._toggleSuggestionList(false);
+        return;
+      } else {
+        scope._toggleSuggestionList(true);
+      }
+
       if (items[0] instanceof Array) {
         $.each(items, function(i, itemGroup) {
           if (!(itemGroup instanceof Array) || !itemGroup.length) return;
@@ -175,6 +191,7 @@ CoffeeSuggest.prototype._onSearchSuggestComplete = function(loadedData) {
         });
         return;
       }
+
       var $suggestionList = scope._constructSuggestionList();
       $.each(items, $.proxy(function(i, item) {
         var
@@ -186,15 +203,18 @@ CoffeeSuggest.prototype._onSearchSuggestComplete = function(loadedData) {
         $listItem[0].JSONData = item;
         $listItem[0].listIndex = currentSuggestionItemIndex++;
         $suggestionList.append($listItem);
-        scope._toggleSuggestionList(true);
       }, this));
       scope._$suggestionListContainer.children('.js-inner').append($suggestionList);
     };
+
   addSuggestions(loadedData);
   this._$suggestionListItems = this._$suggestionListContainer.find('.js-item').not('.js-unselectable');
 };
 
 CoffeeSuggest.prototype._onSearchSuggestError = function(a, b, c) {
+  if (typeof this._onSearchEndCallback === 'function')
+    this._onSearchEndCallback();
+
   console.error('CoffeeSuggest: onSearchSuggestError: ', a, b, c);
 };
 
@@ -217,6 +237,7 @@ CoffeeSuggest.prototype._groupSearchSuggestResults = function(results) {
 };
 
 CoffeeSuggest.prototype._getSelectedItem = function() {
+  if (!this._$suggestionListItems || !this._$suggestionListItems.length) return null;
   return this._$suggestionListItems.filter('.'+this.SELECTED_ITEM_IDENTIFIER)[0];
 };
 
@@ -226,6 +247,16 @@ CoffeeSuggest.prototype._getListItemAtIndex = function(index) {
   if (index >= this._$suggestionListItems.length)
     index = 0;
   return this._$suggestionListItems[index];
+};
+
+CoffeeSuggest.prototype._selectItemAtIndex = function(index) {
+  this._$suggestionListItems.removeClass(this.SELECTED_ITEM_IDENTIFIER);
+  selectedItem = this._$suggestionListItems.eq(index).addClass(this.SELECTED_ITEM_IDENTIFIER);
+
+  if (!this._itemIsSelectable(selectedItem))
+    return this._selectNextItem();
+
+  return selectedItem;
 };
 
 CoffeeSuggest.prototype._selectNextItem = function() {
@@ -238,6 +269,7 @@ CoffeeSuggest.prototype._selectNextItem = function() {
 
   if (!this._itemIsSelectable(nextItem))
     return this._selectNextItem();
+
   return nextItem;
 };
 
@@ -251,6 +283,7 @@ CoffeeSuggest.prototype._selectPreviousItem = function() {
 
   if (!this._itemIsSelectable(previousItem))
     return this._selectPreviousItem();
+
   return previousItem;
 };
 
@@ -258,36 +291,41 @@ CoffeeSuggest.prototype._itemIsSelectable = function(item) {
   return !$(item).hasClass('js-unselectable');
 };
 
-CoffeeSuggest.prototype._highlightCurrentQueryInSuggestion = function(itemData) {
-  var label = this._getLabelForSuggestion(itemData);
+CoffeeSuggest.prototype._highlightCurrentQueryInSuggestion = function(JSONData) {
+  var label = this._getLabelForSuggestion(JSONData);
   return label.replace(new RegExp(this._currentInputValue, 'gi'), '<span class="highlight">'+"$&"+'</span>');
   return '';
 };
 
-CoffeeSuggest.prototype._getLabelForSuggestion = function(itemData) {
+CoffeeSuggest.prototype._toggleSuggestionList = function(show) {
+  if (show) this._$suggestionListContainer.removeClass('hide');
+  else this._$suggestionListContainer.addClass('hide');
+};
+
+CoffeeSuggest.prototype._getLabelForSuggestion = function(JSONData) {
   if (typeof this._getSuggestionLabelFunction === 'function')
-    return this._getSuggestionLabelFunction(itemData);
-  else if (typeof itemData === 'string')
-    return itemData;
-  else if ('title' in itemData)
-    return itemData.title;
-  else if ('name' in itemData)
-    return itemData.name;
-  else if ('label' in itemData)
-    return itemData.label;
-  else if ('text' in itemData)
-    return itemData.text;
+    return this._getSuggestionLabelFunction(JSONData);
+  else if (typeof JSONData === 'string')
+    return JSONData;
+  else if ('title' in JSONData)
+    return JSONData.title;
+  else if ('name' in JSONData)
+    return JSONData.name;
+  else if ('label' in JSONData)
+    return JSONData.label;
+  else if ('text' in JSONData)
+    return JSONData.text;
   else
     return '';
 }
 
-CoffeeSuggest.prototype._getURIForSuggestion = function(itemData) {
+CoffeeSuggest.prototype._getURIForSuggestion = function(JSONData) {
   if (typeof this._getSuggestionURIFunction === 'function')
-    return this._getSuggestionURIFunction(itemData);
-  else if ('uri' in itemData)
-    return itemData.uri;
-  else if ('permalink' in itemData)
-    return itemData.permalink;
+    return this._getSuggestionURIFunction(JSONData);
+  else if ('uri' in JSONData)
+    return JSONData.uri;
+  else if ('permalink' in JSONData)
+    return JSONData.permalink;
   return '';
 };
 
@@ -295,12 +333,6 @@ CoffeeSuggest.prototype._addSuggestionListItemHeader = function(listGroupIndex) 
   var $itemHeader = this._constructSuggestionListItemHeader();
   $itemHeader.children('.js-inner').html(this._suggestionListGroupLabels[listGroupIndex]);
   this._$suggestionListContainer.children('.js-inner').append($itemHeader);
-};
-
-CoffeeSuggest.prototype._toggleSuggestionList = function(show) {
-  var el = this._$suggestionListContainer;
-  if (show) el.removeClass('hide');
-  else el.addClass('hide');
 };
 
 CoffeeSuggest.prototype._constructSuggestionListContainerElement = function() {
@@ -317,4 +349,31 @@ CoffeeSuggest.prototype._constructSuggestionListItem = function() {
 
 CoffeeSuggest.prototype._constructSuggestionListItemHeader = function() {
   return $(this.SUGGESTION_LIST_ITEM_HEADER_MARKUP);
+};
+
+/********************************************************************************************
+ * Public Methods
+ ********************************************************************************************/
+CoffeeSuggest.prototype.setOffset = function(direction, value) {
+  var numberValue = parseInt(value, 10);
+  if (!numberValue) return;
+  this._$suggestionListContainer.css('position', 'absolute');
+  switch (direction) {
+    case 'top':
+      this._$suggestionListContainer.css('top', value+'px');
+      break;
+    case 'right':
+      this._$suggestionListContainer.css('right', value+'px');
+      break;
+    case 'bottom':
+      this._$suggestionListContainer.css('bottom', value+'px');
+      break;
+    case 'left':
+      this._$suggestionListContainer.css('left', value+'px');
+  }
+};
+
+CoffeeSuggest.prototype.reset = function() {
+  this._$inputElem.val('');
+  this._toggleSuggestionList(false);
 };
