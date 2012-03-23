@@ -147,7 +147,7 @@ CoffeeSuggest.prototype._onSuggestionPick = function() {
 };
 
 CoffeeSuggest.prototype._isValidSearchSuggestQuery = function(query) {
-  return query.length > 0;
+  return query.length > 2;
 };
 
 CoffeeSuggest.prototype._doSearchSuggest = function(query) {
