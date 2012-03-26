@@ -193,18 +193,18 @@ CoffeeSuggest.prototype._onSearchSuggestComplete = function(loadedData) {
   this._$suggestionListContainer.find('.js-header, .js-list').remove();
   this._$suggestionListItems = null;
 
+  if (!loadedData.length) {
+    this._toggleSuggestionList(false);
+    return;
+  } else {
+    this._toggleSuggestionList(true);
+  }
+
   var
     scope = this,
     suggestionItems = loadedData,//this._groupSearchSuggestResults(loadedData),
     currentSuggestionItemIndex = 0,
     addSuggestions = function(items) {
-      if (items.length === 0) {
-        scope._toggleSuggestionList(false);
-        return;
-      } else {
-        scope._toggleSuggestionList(true);
-      }
-
       if (items[0] instanceof Array) {
         $.each(items, function(i, itemGroup) {
           if (!(itemGroup instanceof Array) || !itemGroup.length) return;
