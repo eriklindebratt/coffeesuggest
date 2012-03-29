@@ -187,18 +187,14 @@ CoffeeSuggest.prototype._doSearchSuggest = function(query) {
 };
 
 CoffeeSuggest.prototype._onSearchSuggestComplete = function(loadedData) {
-  if (typeof this._onSearchEndCallback === 'function')
-    this._onSearchEndCallback();
-
   this._$suggestionListContainer.find('.js-header, .js-list').remove();
   this._$suggestionListItems = null;
 
-  if (!loadedData.length) {
-    this._toggleSuggestionList(false);
-    return;
-  } else {
-    this._toggleSuggestionList(true);
-  }
+  if (typeof this._onSearchEndCallback === 'function') {
+		this._onSearchEndCallback(loadedData);
+	}
+
+  if (!loadedData || !loadedData.length) return;
 
   var
     scope = this,
@@ -216,31 +212,36 @@ CoffeeSuggest.prototype._onSearchSuggestComplete = function(loadedData) {
 
       var $suggestionList = scope._constructSuggestionList();
       $.each(items, $.proxy(function(i, item) {
-        var
-          $listItem = scope._constructSuggestionListItem(),
-          url = scope._getURIForSuggestion(item),
-          label = scope._highlightCurrentQueryInSuggestion(item),
-          listItemContent = '<a href="'+url+'">' + label + '</a>';
-
-        $listItem.html(listItemContent);
-        if (typeof scope._listItemFormatter === 'function') $listItem = scope._listItemFormatter($listItem, item);
-        $listItem[0].JSONData = item;
-        $listItem[0].listIndex = currentSuggestionItemIndex++;
-
-        $suggestionList.append($listItem);
+				scope.addSuggestionItem(item, currentSuggestionItemIndex++, $suggestionList);
       }, this));
-      scope._$suggestionListContainer.children('.js-inner').append($suggestionList);
+			scope._addSuggestionList($suggestionList);
     };
 
   addSuggestions(loadedData);
-  scope._$suggestionListItems = scope._$suggestionListContainer.find('.js-item').not('.js-unselectable');
 
-  scope._bindSuggestionListItemEvents();
+	this._onSuggestionItemsChange();
 };
 
 CoffeeSuggest.prototype._onSearchSuggestError = function(a, b, c) {
   if (typeof this._onSearchEndCallback === 'function')
     this._onSearchEndCallback();
+};
+
+CoffeeSuggest.prototype._addSuggestionList = function($suggestionList) {
+	this._$suggestionListContainer.children('.js-inner').append($suggestionList);
+};
+
+/**
+ * @function onSuggestionItemsChange
+ * Called mainly when the list of suggestions have changed
+ */
+CoffeeSuggest.prototype._onSuggestionItemsChange = function() {
+  this._$suggestionListItems = this._$suggestionListContainer.find('.js-item').not('.js-unselectable');
+
+	this._toggleSuggestionList(this._$suggestionListItems
+														 && this._$suggestionListItems.length);
+
+  this._bindSuggestionListItemEvents();
 };
 
 /**
@@ -399,6 +400,35 @@ CoffeeSuggest.prototype._constructSuggestionListItemHeader = function() {
 /********************************************************************************************
  * Public Methods
  ********************************************************************************************/
+CoffeeSuggest.prototype.addSuggestionItem = function(itemData, currentSuggestionItemIndex, $suggestionList, autoSelectItem) {
+	if (currentSuggestionItemIndex == null) currentSuggestionItemIndex = 0;
+	if ($suggestionList == null || !$suggestionList.length) {
+		var
+			addSuggestionList = true,
+			$suggestionList = this._constructSuggestionList();
+	}
+
+	var
+		$listItem = this._constructSuggestionListItem(),
+		url = this._getURIForSuggestion(itemData),
+		label = this._highlightCurrentQueryInSuggestion(itemData),
+		listItemContent = '<a href="'+url+'">' + label + '</a>';
+
+	$listItem.html(listItemContent);
+	if (typeof this._listItemFormatter === 'function') $listItem = this._listItemFormatter($listItem, itemData);
+	$listItem[0].JSONData = itemData;
+	$listItem[0].listIndex = currentSuggestionItemIndex;
+
+	if (addSuggestionList) this._addSuggestionList($suggestionList);
+	$suggestionList.append($listItem);
+
+	this._onSuggestionItemsChange();
+
+	if (autoSelectItem) {
+		this._selectItemAtIndex(currentSuggestionItemIndex);
+	}
+};
+
 CoffeeSuggest.prototype.setOffset = function(direction, value) {
   var numberValue = parseInt(value, 10);
   if (!numberValue) return;
