@@ -24,11 +24,11 @@ CoffeeSuggest = function($inputElem, ajaxSearchURIPrefix, onSuggestionPickCallba
   this._onSuggestionPickCallback               = onSuggestionPickCallback;
   this._suggestionListGroupLabels              = suggestionListGroupLabels;
   this._listItemFormatter                      = listItemFormatter;
-  this._getSuggestionLabelFunction             = getSuggestionLabelFunction
+  this._getSuggestionLabelFunction             = getSuggestionLabelFunction;
   this._searchURIPrefix                        = searchURIPrefix;
   this._onSearchStartCallback                  = onSearchStartCallback;
   this._onSearchEndCallback                    = onSearchEndCallback;
-  this._getSuggestionURIFunction               = getSuggestionURIFunction
+  this._getSuggestionURIFunction               = getSuggestionURIFunction;
   this._inputElemHasFocus                      = false;
   this._currentInputValue                      = this._$inputElem.val();
   this._lastInputValue                         = this._currentInputValue;
@@ -63,26 +63,29 @@ CoffeeSuggest = function($inputElem, ajaxSearchURIPrefix, onSuggestionPickCallba
 };
 
 CoffeeSuggest.prototype._bindSuggestionListItemEvents = function() {
+  this._unbindSuggestionListItemEvents();
+  
   var scope = this;
   this._$suggestionListContainer
-    .on('mouseover', '.item', function(e) {
+    .on('mouseover', '.js-item', function(e) {
       if (scope._itemIsSelectable(e.currentTarget)) scope._onSuggestionListItemMouseOver(e);
     })
-    .on('mouseout', '.item', function(e) {
+    .on('mouseout', '.js-item', function(e) {
       if (scope._itemIsSelectable(e.currentTarget)) scope._onSuggestionListItemMouseOut(e);
     })
-    .on('click', '.item', function(e) {
+    .on('click', '.js-item', function(e) {
       e.preventDefault();
       e.stopPropagation();
       scope._onSuggestionPick();
-    })
+      return false;
+    });
 };
 
 CoffeeSuggest.prototype._unbindSuggestionListItemEvents = function() {
   this._$suggestionListContainer
-    .off('mouseover', '.item')
-    .off('mouseout', '.item')
-    .off('click', '.item a');
+    .off('mouseover', '.js-item')
+    .off('mouseout', '.js-item')
+    .off('click', '.js-item');
 };
 
 CoffeeSuggest.prototype._onSuggestionListItemMouseOver = function(e) {
@@ -191,8 +194,8 @@ CoffeeSuggest.prototype._onSearchSuggestComplete = function(loadedData) {
   this._$suggestionListItems = null;
 
   if (typeof this._onSearchEndCallback === 'function') {
-		this._onSearchEndCallback(loadedData);
-	}
+    this._onSearchEndCallback(loadedData);
+  }
 
   if (!loadedData || !loadedData.length) return;
 
@@ -212,14 +215,14 @@ CoffeeSuggest.prototype._onSearchSuggestComplete = function(loadedData) {
 
       var $suggestionList = scope._constructSuggestionList();
       $.each(items, $.proxy(function(i, item) {
-				scope.addSuggestionItem(item, currentSuggestionItemIndex++, $suggestionList);
+        scope.addSuggestionItem(item, currentSuggestionItemIndex++, $suggestionList);
       }, this));
-			scope._addSuggestionList($suggestionList);
+      scope._addSuggestionList($suggestionList);
     };
 
   addSuggestions(loadedData);
 
-	this._onSuggestionItemsChange();
+  this._onSuggestionItemsChange();
 };
 
 CoffeeSuggest.prototype._onSearchSuggestError = function(a, b, c) {
@@ -228,7 +231,7 @@ CoffeeSuggest.prototype._onSearchSuggestError = function(a, b, c) {
 };
 
 CoffeeSuggest.prototype._addSuggestionList = function($suggestionList) {
-	this._$suggestionListContainer.children('.js-inner').append($suggestionList);
+  this._$suggestionListContainer.children('.js-inner').append($suggestionList);
 };
 
 /**
@@ -238,8 +241,8 @@ CoffeeSuggest.prototype._addSuggestionList = function($suggestionList) {
 CoffeeSuggest.prototype._onSuggestionItemsChange = function() {
   this._$suggestionListItems = this._$suggestionListContainer.find('.js-item').not('.js-unselectable');
 
-	this._toggleSuggestionList(this._$suggestionListItems
-														 && this._$suggestionListItems.length);
+  this._toggleSuggestionList(this._$suggestionListItems
+                             && this._$suggestionListItems.length);
 
   this._bindSuggestionListItemEvents();
 };
@@ -359,7 +362,7 @@ CoffeeSuggest.prototype._getLabelForSuggestion = function(JSONData) {
     return JSONData.text;
   else
     return '';
-}
+};
 
 CoffeeSuggest.prototype._getURIForSuggestion = function(JSONData) {
   if (typeof this._getSuggestionURIFunction === 'function')
@@ -401,32 +404,32 @@ CoffeeSuggest.prototype._constructSuggestionListItemHeader = function() {
  * Public Methods
  ********************************************************************************************/
 CoffeeSuggest.prototype.addSuggestionItem = function(itemData, currentSuggestionItemIndex, $suggestionList, autoSelectItem) {
-	if (currentSuggestionItemIndex == null) currentSuggestionItemIndex = 0;
-	if ($suggestionList == null || !$suggestionList.length) {
-		var
-			addSuggestionList = true,
-			$suggestionList = this._constructSuggestionList();
-	}
+  if (currentSuggestionItemIndex == null) currentSuggestionItemIndex = 0;
+  if ($suggestionList == null || !$suggestionList.length) {
+    var
+      addSuggestionList = true,
+      $suggestionList = this._constructSuggestionList();
+  }
 
-	var
-		$listItem = this._constructSuggestionListItem(),
-		url = this._getURIForSuggestion(itemData),
-		label = this._highlightCurrentQueryInSuggestion(itemData),
-		listItemContent = '<a href="'+url+'">' + label + '</a>';
+  var
+    $listItem = this._constructSuggestionListItem(),
+    url = this._getURIForSuggestion(itemData),
+    label = this._highlightCurrentQueryInSuggestion(itemData),
+    listItemContent = '<a href="'+url+'">' + label + '</a>';
 
-	$listItem.html(listItemContent);
-	if (typeof this._listItemFormatter === 'function') $listItem = this._listItemFormatter($listItem, itemData);
-	$listItem[0].JSONData = itemData;
-	$listItem[0].listIndex = currentSuggestionItemIndex;
+  $listItem.html(listItemContent);
+  if (typeof this._listItemFormatter === 'function') $listItem = this._listItemFormatter($listItem, itemData);
+  $listItem[0].JSONData = itemData;
+  $listItem[0].listIndex = currentSuggestionItemIndex;
 
-	if (addSuggestionList) this._addSuggestionList($suggestionList);
-	$suggestionList.append($listItem);
+  if (addSuggestionList) this._addSuggestionList($suggestionList);
+  $suggestionList.append($listItem);
 
-	this._onSuggestionItemsChange();
+  this._onSuggestionItemsChange();
 
-	if (autoSelectItem) {
-		this._selectItemAtIndex(currentSuggestionItemIndex);
-	}
+  if (autoSelectItem) {
+    this._selectItemAtIndex(currentSuggestionItemIndex);
+  }
 };
 
 CoffeeSuggest.prototype.setOffset = function(direction, value) {
