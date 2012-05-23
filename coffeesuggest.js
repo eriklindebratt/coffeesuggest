@@ -59,6 +59,7 @@ CoffeeSuggest = function($inputElem, ajaxSearchURIPrefix, onSuggestionPickCallba
   this._$inputElem
     .on('focus', $.proxy(this._onInputElemFocus, this))
     .on('blur', $.proxy(this._onInputElemBlur, this))
+    .on('keydown', $.proxy(this._onKeyDown, this))
     .on('keyup', $.proxy(this._onKeyUp, this));
 };
 
@@ -113,6 +114,13 @@ CoffeeSuggest.prototype._onInputElemBlur = function() {
   }, 200);
 };
 
+CoffeeSuggest.prototype._onKeyDown = function(e) {
+  if (e.keyCode === 13) {  // return
+    e.preventDefault();
+    e.stopPropagation();
+  }
+};
+
 CoffeeSuggest.prototype._onKeyUp = function(e) {
   switch (e.keyCode) {
     case 27:  // esc
@@ -134,6 +142,9 @@ CoffeeSuggest.prototype._onKeyUp = function(e) {
       this._selectNextItem();
       break;
     case 13:  // return
+      e.preventDefault();
+      e.stopPropagation();
+
       if (this._inputElemHasFocus && this._currentInputValue) {
         if (this._getSelectedItem()) {
           this._onSuggestionPick();
