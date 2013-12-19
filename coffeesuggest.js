@@ -99,7 +99,7 @@ CoffeeSuggest.prototype._onSuggestionListItemMouseOut = function(e) {
 
 CoffeeSuggest.prototype._onInputElemFocus = function(e) {
   this._inputElemHasFocus = true;
-  if (this._hasSuggestions() && this._$suggestionListContainer) {
+  if (this._$inputElem.val() && this._hasSuggestions() && this._$suggestionListContainer) {
     this._toggleSuggestionList(true);
   }
 };
@@ -145,7 +145,7 @@ CoffeeSuggest.prototype._onKeyUp = function(e) {
       e.preventDefault();
       e.stopPropagation();
 
-      if (this._inputElemHasFocus && this._currentInputValue) {
+      if (/*this._inputElemHasFocus && */this._currentInputValue) {
         if (this._getSelectedItem()) {
           this._onSuggestionPick();
         } else if (this._searchURIPrefix) {
@@ -178,11 +178,15 @@ CoffeeSuggest.prototype._onSuggestionPick = function() {
     ? this._getSelectedItem().JSONData
     : this._currentInputValue;
 
-  this._onSuggestionPickCallback(arg);
+  this._onSuggestionPickCallback(
+    arg,  // can be data or current input value
+    this._currentInputValue  // should always be current input value
+  );
 };
 
 CoffeeSuggest.prototype._isValidSearchSuggestQuery = function(query) {
-  return query.length > 1;
+  query = query.replace(/\*/g, "");
+  return $.trim(query).length > 1;
 };
 
 CoffeeSuggest.prototype._doSearchSuggest = function(query) {
@@ -349,13 +353,22 @@ CoffeeSuggest.prototype._itemIsSelectable = function(item) {
 
 CoffeeSuggest.prototype._highlightCurrentQueryInSuggestion = function(JSONData) {
   var label = this._getLabelForSuggestion(JSONData);
-  return label.replace(new RegExp(this._currentInputValue, 'gi'), '<span class="highlight">'+"$&"+'</span>');
-  return '';
+  if (label) {
+    return label.replace(new RegExp(this._currentInputValue, 'gi'), '<span class="highlight">'+"$&"+'</span>');
+  } else {
+    return '';
+  }
 };
 
 CoffeeSuggest.prototype._toggleSuggestionList = function(show) {
   if (show) this._$suggestionListContainer.removeClass('hide');
   else this._$suggestionListContainer.addClass('hide');
+
+  this.setOffset('left', 0);
+  this.setOffset(
+    'top',
+    this._$inputElem[0].offsetTop + this._$inputElem[0].clientHeight
+  );
 };
 
 CoffeeSuggest.prototype._getLabelForSuggestion = function(JSONData) {
